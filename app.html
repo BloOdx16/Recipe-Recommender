@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flavor AI: Recipe & Substitute Finder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .tab-btn.active {
+            border-color: #4f46e5;
+            color: #4f46e5;
+            background-color: #eef2ff;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-4xl">
+        <header class="text-center mb-8 relative">
+            <h1 class="text-4xl md:text-5xl font-bold text-indigo-600">Flavor AI</h1>
+            <p class="text-gray-600 mt-2 text-lg">Discover your next favorite dish and perfect ingredient substitutes.</p>
+            
+            <!-- Donate Button -->
+            <div class="absolute top-0 right-0">
+                <!-- IMPORTANT: Replace "#" with your actual Stripe Payment Link -->
+                <a href="#" id="donate-link" target="_blank" rel="noopener noreferrer" class="bg-green-500 text-white font-bold py-2 px-5 rounded-lg hover:bg-green-600 transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                    ❤️ Support Us
+                </a>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <div class="mb-8 flex justify-center border-b border-gray-200">
+            <button id="tab-recommender-btn" class="tab-btn active text-lg font-medium py-3 px-6 border-b-2 border-transparent transition duration-300">Recipe Recommender</button>
+            <button id="tab-substitute-btn" class="tab-btn text-lg font-medium py-3 px-6 border-b-2 border-transparent transition duration-300">Substitute Finder</button>
+        </div>
+
+        <main>
+            <!-- Recipe Recommender Section -->
+            <div id="recommender-section">
+                <div class="bg-white p-6 md:p-8 rounded-2xl shadow-lg">
+                    <h2 class="text-2xl font-bold mb-2 text-gray-800">Find Recipes You'll Love</h2>
+                    <p class="text-gray-500 mb-6">Select up to 5 of your favorite dishes, and our AI will find others with a similar flavor profile.</p>
+                    <div id="recipe-selectors" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                        <!-- Selectors will be dynamically inserted here -->
+                    </div>
+                    <button id="recommend-btn" class="w-full bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Recommend Recipes
+                    </button>
+                </div>
+                <div id="recipe-results" class="mt-8"></div>
+            </div>
+
+            <!-- Substitute Finder Section (Initially Hidden) -->
+            <div id="substitute-section" class="hidden">
+                 <div class="bg-white p-6 md:p-8 rounded-2xl shadow-lg">
+                    <h2 class="text-2xl font-bold mb-2 text-gray-800">Find an Ingredient Substitute</h2>
+                    <p class="text-gray-500 mb-6">Enter an ingredient you're missing, and we'll find the best alternatives based on flavor.</p>
+                    <div class="flex gap-4">
+                        <input type="text" id="substitute-input" list="all-ingredients-list" class="flex-grow w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" placeholder="e.g., Rosemary">
+                        <datalist id="all-ingredients-list"></datalist>
+                        <button id="substitute-btn" class="bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Find
+                        </button>
+                    </div>
+                </div>
+                <div id="substitute-results" class="mt-8"></div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- DATA (Recipes & Pre-trained Ingredient Vectors) ---
+        const RECIPES = [
+            {'name': 'Classic Chicken Adobo', 'cuisine': 'Filipino', 'ingredients': ['Chicken', 'Soy Sauce', 'Vinegar (Cane)', 'Garlic', 'Bay Leaf', 'Black Pepper']},
+            {'name': 'Pork Sinigang', 'cuisine': 'Filipino', 'ingredients': ['Pork', 'Tamarind', 'Fish Sauce', 'Tomato', 'Onion', 'Spinach']},
+            {'name': 'Kare-Kare', 'cuisine': 'Filipino', 'ingredients': ['Oxtail', 'Peanut Butter', 'Eggplant', 'Green Beans', 'Shrimp Paste']},
+            {'name': 'Beef Bulgogi', 'cuisine': 'Korean', 'ingredients': ['Beef', 'Soy Sauce', 'Pear', 'Garlic', 'Sesame Oil', 'Scallion']},
+            {'name': 'Spicy Gochujang Pork', 'cuisine': 'Korean', 'ingredients': ['Pork', 'Gochujang', 'Soy Sauce', 'Sesame Oil', 'Garlic', 'Ginger']},
+            {'name': 'Creamy Tomato Basil Pasta', 'cuisine': 'Italian-American', 'ingredients': ['Tomato', 'Basil', 'Garlic', 'Onion', 'Cream', 'Parmesan']},
+            {'name': 'Spaghetti Carbonara', 'cuisine': 'Italian', 'ingredients': ['Pancetta', 'Egg', 'Parmesan', 'Black Pepper', 'Spaghetti']},
+            {'name': 'Chicken Tikka Masala', 'cuisine': 'Indian', 'ingredients': ['Chicken', 'Yogurt', 'Tomato', 'Garam Masala', 'Ginger', 'Garlic', 'Cream']},
+            {'name': 'Palak Paneer', 'cuisine': 'Indian', 'ingredients': ['Spinach', 'Paneer', 'Onion', 'Garlic', 'Garam Masala', 'Turmeric']},
+            {'name': 'Mexican Chicken Tacos', 'cuisine': 'Mexican', 'ingredients': ['Chicken', 'Corn', 'Lime', 'Cilantro', 'Onion', 'Chili']},
+            {'name': 'Carnitas', 'cuisine': 'Mexican', 'ingredients': ['Pork', 'Orange', 'Onion', 'Garlic', 'Cumin', 'Oregano']},
+            {'name': 'Japanese Miso Salmon', 'cuisine': 'Japanese', 'ingredients': ['Salmon', 'Miso', 'Mirin', 'Soy Sauce', 'Ginger', 'Scallion']},
+            {'name': 'Teriyaki Chicken', 'cuisine': 'Japanese', 'ingredients': ['Chicken', 'Soy Sauce', 'Mirin', 'Sake', 'Sugar', 'Ginger']},
+            {'name': 'Sri Lankan Chicken Curry', 'cuisine': 'Sri Lankan', 'ingredients': ['Chicken', 'Coconut Milk', 'Onion', 'Garlic', 'Cinnamon', 'Curry Leaves', 'Turmeric']},
+            {'name': 'Rosemary Roasted Beef', 'cuisine': 'Western', 'ingredients': ['Beef', 'Rosemary', 'Thyme', 'Garlic', 'Onion', 'Potato']},
+            {'name': 'BBQ Pulled Pork', 'cuisine': 'American', 'ingredients': ['Pork', 'BBQ Sauce', 'Onion', 'Vinegar (Apple Cider)', 'Brown Sugar']},
+            {'name': 'Kung Pao Chicken', 'cuisine': 'Chinese', 'ingredients': ['Chicken', 'Peanut', 'Chili', 'Soy Sauce', 'Vinegar (Rice)', 'Scallion', 'Ginger']},
+            {'name': 'Char Siu (Chinese BBQ Pork)', 'cuisine': 'Chinese', 'ingredients': ['Pork', 'Soy Sauce', 'Hoisin Sauce', 'Honey', 'Five Spice Powder']},
+            {'name': 'Green Curry Chicken', 'cuisine': 'Thai', 'ingredients': ['Chicken', 'Coconut Milk', 'Green Curry Paste', 'Fish Sauce', 'Basil', 'Lime']},
+            {'name': 'Pad Thai', 'cuisine': 'Thai', 'ingredients': ['Rice Noodles', 'Shrimp', 'Tofu', 'Fish Sauce', 'Tamarind', 'Lime', 'Peanut']},
+            {'name': 'Pho Bo (Beef Noodle Soup)', 'cuisine': 'Vietnamese', 'ingredients': ['Beef', 'Rice Noodles', 'Onion', 'Ginger', 'Star Anise', 'Cinnamon', 'Basil', 'Lime']},
+            {'name': 'Chicken Souvlaki', 'cuisine': 'Greek', 'ingredients': ['Chicken', 'Lemon', 'Garlic', 'Oregano', 'Olive Oil', 'Yogurt']},
+            {'name': 'Paella Valenciana', 'cuisine': 'Spanish', 'ingredients': ['Rice', 'Chicken', 'Rabbit', 'Saffron', 'Rosemary', 'Green Beans', 'Tomato']},
+            {'name': 'Coq au Vin', 'cuisine': 'French', 'ingredients': ['Chicken', 'Red Wine', 'Mushroom', 'Onion', 'Bacon', 'Thyme']},
+            {'name': 'Beef Bourguignon', 'cuisine': 'French', 'ingredients': ['Beef', 'Red Wine', 'Carrot', 'Onion', 'Mushroom', 'Garlic', 'Thyme']},
+            {'name': 'Chicken Shawarma', 'cuisine': 'Middle Eastern', 'ingredients': ['Chicken', 'Yogurt', 'Garlic', 'Lemon', 'Cumin', 'Coriander', 'Turmeric']},
+            // --- NEW RECIPES START HERE ---
+            {'name': 'Fettuccine Alfredo', 'cuisine': 'Italian', 'ingredients': ['Fettuccine', 'Cream', 'Parmesan', 'Butter', 'Black Pepper']},
+            {'name': 'Pork Vindaloo', 'cuisine': 'Indian', 'ingredients': ['Pork', 'Vinegar', 'Chili', 'Garlic', 'Ginger', 'Turmeric', 'Cinnamon']},
+            {'name': 'Chilaquiles Rojos', 'cuisine': 'Mexican', 'ingredients': ['Corn Tortilla', 'Tomato', 'Onion', 'Garlic', 'Chili', 'Cheese (Cotija)', 'Egg']},
+            {'name': 'Tom Kha Gai (Coconut Chicken Soup)', 'cuisine': 'Thai', 'ingredients': ['Chicken', 'Coconut Milk', 'Lemongrass', 'Lime', 'Mushroom', 'Fish Sauce']},
+            {'name': 'General Tso\'s Chicken', 'cuisine': 'Chinese', 'ingredients': ['Chicken', 'Soy Sauce', 'Vinegar (Rice)', 'Sugar', 'Ginger', 'Garlic', 'Chili']},
+            {'name': 'Banh Xeo (Vietnamese Crepe)', 'cuisine': 'Vietnamese', 'ingredients': ['Rice Flour', 'Turmeric', 'Coconut Milk', 'Pork', 'Shrimp', 'Bean Sprouts']},
+            {'name': 'Jamaican Jerk Chicken', 'cuisine': 'Jamaican', 'ingredients': ['Chicken', 'Allspice', 'Thyme', 'Scallion', 'Chili', 'Soy Sauce']},
+            {'name': 'Moqueca (Brazilian Fish Stew)', 'cuisine': 'Brazilian', 'ingredients': ['Fish', 'Coconut Milk', 'Tomato', 'Onion', 'Bell Pepper', 'Cilantro', 'Lime']},
+            {'name': 'Hungarian Goulash', 'cuisine': 'Hungarian', 'ingredients': ['Beef', 'Onion', 'Paprika', 'Carrot', 'Potato', 'Tomato']},
+            {'name': 'Cajun Gumbo', 'cuisine': 'Cajun', 'ingredients': ['Chicken', 'Sausage', 'Onion', 'Celery', 'Bell Pepper', 'Garlic', 'Thyme']},
+            {'name': 'Jambalaya', 'cuisine': 'Creole', 'ingredients': ['Chicken', 'Sausage', 'Shrimp', 'Rice', 'Onion', 'Celery', 'Bell Pepper', 'Tomato']},
+            {'name': 'Mushroom Stroganoff', 'cuisine': 'Vegetarian', 'ingredients': ['Mushroom', 'Onion', 'Sour Cream', 'Mustard', 'Thyme', 'Pasta']},
+            {'name': 'Ratatouille', 'cuisine': 'French', 'ingredients': ['Eggplant', 'Zucchini', 'Tomato', 'Bell Pepper', 'Onion', 'Garlic', 'Basil']},
+            {'name': 'Hummus', 'cuisine': 'Middle Eastern', 'ingredients': ['Chickpeas', 'Tahini', 'Lemon', 'Garlic', 'Cumin']},
+            {'name': 'Tabbouleh', 'cuisine': 'Lebanese', 'ingredients': ['Parsley', 'Mint', 'Bulgur', 'Tomato', 'Onion', 'Lemon']},
+            {'name': 'Doro Wat (Ethiopian Chicken Stew)', 'cuisine': 'Ethiopian', 'ingredients': ['Chicken', 'Onion', 'Berbere Spice', 'Garlic', 'Ginger', 'Butter']},
+            {'name': 'Shepherd\'s Pie', 'cuisine': 'British', 'ingredients': ['Lamb', 'Potato', 'Onion', 'Carrot', 'Worcestershire Sauce']},
+            {'name': 'Borscht', 'cuisine': 'Eastern European', 'ingredients': ['Beetroot', 'Cabbage', 'Potato', 'Carrot', 'Onion', 'Beef', 'Dill']},
+            {'name': 'Lomo Saltado', 'cuisine': 'Peruvian', 'ingredients': ['Beef', 'Onion', 'Tomato', 'Soy Sauce', 'Vinegar', 'Potato', 'Cilantro']},
+            {'name': 'Chicken Tagine', 'cuisine': 'Moroccan', 'ingredients': ['Chicken', 'Onion', 'Ginger', 'Turmeric', 'Cinnamon', 'Olive', 'Lemon']},
+        ];
+        
+        const INGREDIENT_VECTORS = {'Garlic':[-0.1,0.2,-0.3,0.4],'Ginger':[-0.15,0.22,-0.33,0.41],'Onion':[-0.09,0.18,-0.28,0.38],'Soy Sauce':[0.5,-0.2,0.1,0.3],'Chicken':[0.0,0.1,-0.1,0.2],'Beef':[0.1,0.05,-0.15,0.25],'Pork':[0.08,0.07,-0.12,0.22],'Thyme':[-0.2,0.3,-0.4,0.1],'Rosemary':[-0.22,0.31,-0.42,0.11],'Lemon':[0.3,-0.4,0.5,-0.1],'Lime':[0.32,-0.41,0.51,-0.11],'Chili':[0.4,0.1,-0.2,0.5],'Cumin':[-0.3,0.1,0.2,0.3],'Coriander':[-0.28,0.12,0.22,0.31],'Coconut Milk':[0.6,0.5,0.4,-0.3],'Tomato':[-0.4,0.0,0.1,0.0],'Basil':[-0.41,0.02,0.11,-0.01],'Oregano':[-0.39,-0.01,0.09,0.02],'Gochujang':[0.45,0.15,-0.25,0.55],'Sesame Oil':[0.55,-0.1,0.15,0.35],'Vinegar (Cane)':[0.2,-0.5,0.6,0.0],'Fish Sauce':[0.4,-0.3,0.2,0.2],'Bay Leaf':[-0.1,-0.1,0.0,0.1],'Black Pepper':[-0.05,-0.05,0.05,0.05],'Tamarind':[-0.5,0.4,0.3,-0.2],'Spinach':[-0.3,-0.2,0.1,0.1],'Peanut Butter':[0.2,0.6,0.1,0.1],'Pear':[0.1,0.7,0.0,0.0],'Miso':[0.48,-0.22,0.12,0.32],'Mirin':[0.51,-0.18,0.08,0.33],'Sake':[0.52,-0.15,0.05,0.31],'Sugar':[0.1,0.8,0.0,0.0],'Curry Leaves':[-0.25,0.2,0.25,0.35],'Turmeric':[-0.32,0.08,0.18,0.28],'Cinnamon':[-0.1,0.5,0.2,0.0],'Red Wine':[0.15,-0.1,-0.2,0.18],'Mushroom':[-0.1,0.0,0.0,0.2],'Cream':[0.0,0.4,0.3,0.0],'Parmesan':[0.1,0.2,0.2,0.1],'Pancetta':[0.12,0.1, -0.1, 0.23], 'Paprika':[-0.35,0.05,0.15,0.25], 'Allspice':[-0.15,0.45,0.15,-0.05], 'Bell Pepper':[-0.38, -0.1, 0.12, 0.05], 'Celery':[-0.3, -0.15, 0.08, 0.08], 'Shrimp':[0.35, -0.35, 0.15, 0.15], 'Sausage':[0.1, 0.08, -0.08, 0.24], 'Vinegar (Rice)':[0.22,-0.52,0.61,0.02]};
+        const ALL_INGREDIENTS = Object.keys(INGREDIENT_VECTORS);
+
+        // --- UTILITY FUNCTIONS (Vector Math) ---
+        function dot(v1, v2) {
+            return v1.reduce((acc, val, i) => acc + val * v2[i], 0);
+        }
+
+        function magnitude(v) {
+            return Math.sqrt(v.reduce((acc, val) => acc + val * val, 0));
+        }
+
+        function cosineSimilarity(v1, v2) {
+            if (!v1 || !v2) return 0;
+            const mag1 = magnitude(v1);
+            const mag2 = magnitude(v2);
+            if (mag1 === 0 || mag2 === 0) return 0;
+            return dot(v1, v2) / (mag1 * mag2);
+        }
+
+        function getRecipeVector(ingredients) {
+            const vectors = ingredients
+                .map(ing => INGREDIENT_VECTORS[ing])
+                .filter(v => v);
+            
+            if (vectors.length === 0) return null;
+
+            const vectorSize = vectors[0].length;
+            const meanVector = new Array(vectorSize).fill(0);
+            for (const vec of vectors) {
+                for (let i = 0; i < vectorSize; i++) {
+                    meanVector[i] += vec[i];
+                }
+            }
+            return meanVector.map(val => val / vectors.length);
+        }
+
+        // --- UI LOGIC ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const recipeSelectorsContainer = document.getElementById('recipe-selectors');
+            const recommendBtn = document.getElementById('recommend-btn');
+            const recipeResultsContainer = document.getElementById('recipe-results');
+            
+            const substituteInput = document.getElementById('substitute-input');
+            const substituteBtn = document.getElementById('substitute-btn');
+            const substituteResultsContainer = document.getElementById('substitute-results');
+            const allIngredientsDatalist = document.getElementById('all-ingredients-list');
+
+            const tabRecommenderBtn = document.getElementById('tab-recommender-btn');
+            const tabSubstituteBtn = document.getElementById('tab-substitute-btn');
+            const recommenderSection = document.getElementById('recommender-section');
+            const substituteSection = document.getElementById('substitute-section');
+
+            const sortedRecipes = [...RECIPES].sort((a, b) => a.name.localeCompare(b.name));
+            for (let i = 0; i < 5; i++) {
+                const select = document.createElement('select');
+                select.className = "w-full px-4 py-3 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition";
+                const defaultOption = new Option(`Select favorite dish #${i + 1}...`, "");
+                defaultOption.disabled = true;
+                defaultOption.selected = true;
+                select.add(defaultOption);
+                sortedRecipes.forEach(recipe => {
+                    select.add(new Option(`${recipe.name} (${recipe.cuisine})`, recipe.name));
+                });
+                recipeSelectorsContainer.appendChild(select);
+            }
+            
+            ALL_INGREDIENTS.sort().forEach(ing => {
+                const option = document.createElement('option');
+                option.value = ing;
+                allIngredientsDatalist.appendChild(option);
+            });
+
+            tabRecommenderBtn.addEventListener('click', () => {
+                recommenderSection.classList.remove('hidden');
+                substituteSection.classList.add('hidden');
+                tabRecommenderBtn.classList.add('active');
+                tabSubstituteBtn.classList.remove('active');
+            });
+
+            tabSubstituteBtn.addEventListener('click', () => {
+                recommenderSection.classList.add('hidden');
+                substituteSection.classList.remove('hidden');
+                tabRecommenderBtn.classList.remove('active');
+                tabSubstituteBtn.classList.add('active');
+            });
+
+            recommendBtn.addEventListener('click', handleRecommend);
+            substituteBtn.addEventListener('click', handleSubstitute);
+            substituteInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') handleSubstitute();
+            });
+
+            function handleRecommend() {
+                const selectedRecipeNames = Array.from(recipeSelectorsContainer.children)
+                    .map(select => select.value)
+                    .filter(value => value !== "");
+
+                if (selectedRecipeNames.length < 1) {
+                    recipeResultsContainer.innerHTML = `<p class="text-center text-red-500">Please select at least one favorite recipe.</p>`;
+                    return;
+                }
+
+                const favoriteIngredients = RECIPES
+                    .filter(r => selectedRecipeNames.includes(r.name))
+                    .flatMap(r => r.ingredients);
+
+                const userProfileVector = getRecipeVector(favoriteIngredients);
+                
+                if (!userProfileVector) {
+                    recipeResultsContainer.innerHTML = `<p class="text-center text-red-500">Could not create a flavor profile from your selections.</p>`;
+                    return;
+                }
+
+                const scoredRecipes = RECIPES
+                    .filter(r => !selectedRecipeNames.includes(r.name))
+                    .map(recipe => {
+                        const recipeVector = getRecipeVector(recipe.ingredients);
+                        const score = cosineSimilarity(userProfileVector, recipeVector);
+                        return { ...recipe, score };
+                    })
+                    .filter(r => r.score)
+                    .sort((a, b) => b.score - a.score);
+
+                displayRecipeResults(scoredRecipes.slice(0, 4));
+            }
+
+            function handleSubstitute() {
+                const ingredient = substituteInput.value.trim();
+                if (!ingredient) {
+                    substituteResultsContainer.innerHTML = `<p class="text-center text-red-500">Please enter an ingredient.</p>`;
+                    return;
+                }
+
+                const targetVector = INGREDIENT_VECTORS[ingredient];
+                if (!targetVector) {
+                    substituteResultsContainer.innerHTML = `<p class="text-center text-red-500">Sorry, we don't have data for '${ingredient}'.</p>`;
+                    return;
+                }
+
+                const substitutes = ALL_INGREDIENTS
+                    .filter(ing => ing !== ingredient)
+                    .map(ing => ({
+                        name: ing,
+                        score: cosineSimilarity(targetVector, INGREDIENT_VECTORS[ing])
+                    }))
+                    .sort((a, b) => b.score - a.score);
+
+                displaySubstituteResults(ingredient, substitutes.slice(0, 5));
+            }
+
+            function displayRecipeResults(results) {
+                if (results.length === 0) {
+                    recipeResultsContainer.innerHTML = `<p class="text-center text-gray-500">No new recommendations found based on your selection.</p>`;
+                    return;
+                }
+                const cards = results.map(rec => `
+                    <div class="bg-white rounded-xl shadow-md overflow-hidden transform hover:-translate-y-1 transition-transform duration-300">
+                        <div class="p-6">
+                            <div class="uppercase tracking-wide text-sm text-indigo-500 font-semibold">${rec.cuisine}</div>
+                            <h3 class="block mt-1 text-lg leading-tight font-medium text-black">${rec.name}</h3>
+                            <p class="mt-2 text-gray-500 text-sm">Flavor Similarity: <span class="font-bold text-indigo-600">${(rec.score * 100).toFixed(0)}%</span></p>
+                        </div>
+                    </div>
+                `).join('');
+                recipeResultsContainer.innerHTML = `
+                    <h3 class="text-2xl font-bold mb-4 text-center">You might also like...</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">${cards}</div>
+                `;
+            }
+
+            function displaySubstituteResults(original, results) {
+                 if (results.length === 0) {
+                    substituteResultsContainer.innerHTML = `<p class="text-center text-gray-500">No substitutes found.</p>`;
+                    return;
+                }
+                const items = results.map(sub => `
+                    <li class="flex justify-between items-center p-4 bg-gray-100 rounded-lg">
+                        <span class="font-medium text-gray-800">${sub.name}</span>
+                        <span class="text-sm text-green-600 font-semibold">Similarity: ${(sub.score * 100).toFixed(0)}%</span>
+                    </li>
+                `).join('');
+                substituteResultsContainer.innerHTML = `
+                    <h3 class="text-2xl font-bold mb-4 text-center">Substitutes for ${original}</h3>
+                    <ul class="space-y-3">${items}</ul>
+                `;
+            }
+        });
+    </script>
+
+</body>
+</html>
